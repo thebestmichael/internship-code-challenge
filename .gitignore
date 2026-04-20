@@ -1,0 +1,6 @@
+farm-challenge/target/
+farm-challenge/*.jar
+.idea/
+*.iml
+.vscode/
+.DS_Store
