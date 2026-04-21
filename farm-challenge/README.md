@@ -185,8 +185,6 @@ k ≤ colors × maxBarnsPerColor, which is bounded by the configuration, not n.
 
 - **JaCoCo coverage report** — add the JaCoCo Maven plugin to generate an HTML
   report and verify the ~90% target numerically.
-- **Parameterized tests** — added `@CsvSource`-driven normalization tests; could extend to
-  even-distribution edge cases (n = 1 through 20).
 - **CLI flags** — add `--capacity` and `--max-barns` flags via a lightweight
   args parser so the barn limits can be changed at runtime without recompiling.
 - **Logging** — replace `System.err` with SLF4J + Logback for structured logging
