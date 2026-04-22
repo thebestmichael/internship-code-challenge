@@ -1,11 +1,12 @@
 package com.logicgate.farm;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.databind.ObjectWriter;
 import com.logicgate.farm.exception.FarmDataException;
 import com.logicgate.farm.model.Animal;
 import com.logicgate.farm.model.BarnAssignment;
 import com.logicgate.farm.service.BarnAssignmentService;
+import com.logicgate.farm.util.CompactPrettyPrinter;
 import com.logicgate.farm.util.JsonParser;
 
 import java.util.List;
@@ -23,8 +24,10 @@ import java.util.List;
  * </pre>
  *
  * <h2>Output</h2>
- * Prints a pretty-printed JSON array of barn assignment objects to stdout.
- * All error messages go to stderr so that stdout output can be piped cleanly.
+ * Prints a pretty-printed JSON array of barn assignment objects to stdout,
+ * using {@link CompactPrettyPrinter} so the output matches the spec's
+ * {@code "key": "value"} spacing. All error messages go to stderr so stdout
+ * can be piped cleanly.
  *
  * <h2>Exit Codes</h2>
  * <ul>
@@ -50,14 +53,14 @@ public class Main {
             // 1. Parse and validate the input JSON file.
             List<Animal> animals = JsonParser.parseAnimals(inputFile);
 
-            // 2. Distribute animals into barns using default capacity/limit settings.
+            // 2. Distribute animals into barns using production defaults.
             BarnAssignmentService service = new BarnAssignmentService();
             List<BarnAssignment> assignments = service.assignAnimals(animals);
 
-            // 3. Serialize the result to indented JSON and print to stdout.
+            // 3. Serialize the result using the spec-matching pretty printer.
             ObjectMapper mapper = new ObjectMapper();
-            mapper.enable(SerializationFeature.INDENT_OUTPUT);
-            System.out.println(mapper.writeValueAsString(assignments));
+            ObjectWriter writer = mapper.writer(new CompactPrettyPrinter());
+            System.out.println(writer.writeValueAsString(assignments));
 
         } catch (FarmDataException e) {
             System.err.println("[ERROR] Farm data problem: " + e.getMessage());
