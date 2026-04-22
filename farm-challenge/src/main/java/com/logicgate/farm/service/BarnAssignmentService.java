@@ -11,7 +11,8 @@ import java.util.Map;
 
 /**
  * Core service that distributes animals from the livestock list into
- * colored barns, enforcing capacity limits, even distribution, and overflow.
+ * colored barns, enforcing capacity limits, even distribution, and
+ * (optionally) a finite farm footprint with overflow.
  *
  * <h2>Rules</h2>
  * <ol>
@@ -19,14 +20,17 @@ import java.util.Map;
  *       Color matching is case-insensitive; output barn names use Title Case.</li>
  *   <li><b>Barn capacity</b> - Each barn holds at most {@code barnCapacity} animals
  *       (default: 4).</li>
- *   <li><b>Barn limit per color</b> - At most {@code maxBarnsPerColor} barns are
- *       created per color (default: 3).</li>
+ *   <li><b>Barn limit per color</b> - The farm can grow as many barns per color
+ *       as needed. The default {@code maxBarnsPerColor} is effectively unbounded
+ *       ({@link Integer#MAX_VALUE}), which honors the challenge's requirement
+ *       that the solution stay dynamic as the livestock array grows.</li>
  *   <li><b>Even distribution (bonus)</b> - Animals are spread as evenly as possible
  *       across barns of the same color. The size difference between any two barns of
  *       the same color is at most 1. Larger barns come first.</li>
- *   <li><b>Overflow (bonus)</b> - Animals that exceed total barn capacity for their
- *       color ({@code barnCapacity × maxBarnsPerColor}) are collected in a special
- *       {@code "Unassigned"} entry appended at the end of the output.</li>
+ *   <li><b>Overflow (bonus, opt-in)</b> - Callers that model a finite farm can pass
+ *       an explicit {@code maxBarnsPerColor}. Animals that exceed
+ *       {@code barnCapacity × maxBarnsPerColor} for their color are collected in a
+ *       single {@code "Unassigned"} entry appended at the end of the output.</li>
  * </ol>
  *
  * <h2>Time Complexity</h2>
@@ -48,15 +52,20 @@ public class BarnAssignmentService {
 
     /**
      * Creates a service with production defaults:
-     * {@code barnCapacity = 4}, {@code maxBarnsPerColor = 3}.
+     * {@code barnCapacity = 4}, {@code maxBarnsPerColor = Integer.MAX_VALUE}.
+     *
+     * <p>With this default the farm grows barns as needed, so the solution
+     * scales with input size as the challenge requires. To opt into
+     * bounded-farm semantics (and the {@code "Unassigned"} overflow entry),
+     * use the two-arg constructor.
      */
     public BarnAssignmentService() {
-        this(4, 3);
+        this(4, Integer.MAX_VALUE);
     }
 
     /**
-     * Creates a service with custom limits, useful for testing or
-     * deployment configurations.
+     * Creates a service with custom limits, useful for testing or for modeling
+     * a farm with a finite number of barns per color.
      *
      * @param barnCapacity     maximum animals per barn; must be ≥ 1
      * @param maxBarnsPerColor maximum barns per color; must be ≥ 1
@@ -91,16 +100,21 @@ public class BarnAssignmentService {
         List<BarnAssignment> assignments  = new ArrayList<>();
         List<String>         allOverflow  = new ArrayList<>();
 
+        // Precompute total capacity per color as a long, then clamp to int.
+        // barnCapacity × maxBarnsPerColor can exceed Integer.MAX_VALUE when
+        // the cap is unbounded, so we promote to long before multiplying.
+        final int totalCapacity = clampToInt(
+                (long) barnCapacity * (long) maxBarnsPerColor);
+
         // Step 2: Process each color group independently
         for (Map.Entry<String, List<String>> entry : animalsByColor.entrySet()) {
             String       colorKey    = entry.getKey();           // normalized lowercase
             List<String> animalNames = entry.getValue();
 
-            int totalCapacity = barnCapacity * maxBarnsPerColor;
-
             // Split into animals that fit and those that overflow.
-            List<String> fitsInBarn = animalNames.subList(0, Math.min(animalNames.size(), totalCapacity));
-            List<String> overflow   = animalNames.subList(fitsInBarn.size(), animalNames.size());
+            int fitCount = Math.min(animalNames.size(), totalCapacity);
+            List<String> fitsInBarn = animalNames.subList(0, fitCount);
+            List<String> overflow   = animalNames.subList(fitCount, animalNames.size());
 
             allOverflow.addAll(overflow);
 
@@ -170,7 +184,9 @@ public class BarnAssignmentService {
      * @return list of BarnAssignment objects for this color group
      */
     private List<BarnAssignment> distributeEvenly(String color, List<String> animalNames) {
-        int total    = animalNames.size();
+        int total = animalNames.size();
+        if (total == 0) return List.of();
+
         int numBarns = Math.min(
                 (int) Math.ceil((double) total / barnCapacity),
                 maxBarnsPerColor
@@ -197,6 +213,18 @@ public class BarnAssignmentService {
     }
 
     /**
+     * Clamps a long value to the int range, returning {@link Integer#MAX_VALUE}
+     * if the value overflows. Used to guard against
+     * {@code barnCapacity × maxBarnsPerColor} exceeding int range when the cap
+     * is effectively unbounded.
+     */
+    private static int clampToInt(long value) {
+        if (value > Integer.MAX_VALUE) return Integer.MAX_VALUE;
+        if (value < 0) return Integer.MAX_VALUE;   // defensive: shouldn't happen given ctor guards
+        return (int) value;
+    }
+
+    /**
      * Converts the first character of {@code s} to uppercase and the rest to
      * lowercase, producing a consistent Title-Case color name for barn labels.
      *
@@ -210,7 +238,7 @@ public class BarnAssignmentService {
         return Character.toUpperCase(s.charAt(0)) + s.substring(1).toLowerCase();
     }
 
-    // Accessors ( will be used in tests to verify configuration)
+    // Accessors (used in tests to verify configuration)
 
     /** Returns the configured maximum capacity per barn. */
     public int getBarnCapacity()     { return barnCapacity; }
